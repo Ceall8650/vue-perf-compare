@@ -20,6 +20,7 @@
     .btn-primary:hover { background: #c73e54; }
     .btn-secondary { background: #0f3460; color: #e0e0e0; border: 1px solid #444; }
     .btn-secondary:hover { background: #1a1a4e; }
+    .btn-active { outline: 2px solid #e94560; outline-offset: -2px; background: #2a0e0e !important; color: #e94560 !important; }
     .metrics { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
     .metric { background: #0f3460; border-radius: 8px; padding: 12px 16px; min-width: 140px; }
     .metric-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
@@ -92,12 +93,12 @@
     <div class="panel" v-if="currentTab === 'list'">
       <h3 style="margin-bottom: 12px;">Large List Rendering & Update (v-for / table)</h3>
       <div class="controls">
-        <button class="btn btn-primary" @click="listCreate(10000)">Create 10,000 rows</button>
-        <button class="btn btn-secondary" @click="listCreate(50000)">Create 50,000 rows</button>
-        <button class="btn btn-secondary" @click="listUpdateEvery10th" :disabled="!listItems.length">Update every 10th</button>
-        <button class="btn btn-secondary" @click="listSwapRows" :disabled="listItems.length < 1000">Swap rows</button>
-        <button class="btn btn-secondary" @click="listAppend1000" :disabled="!listItems.length">Append 1,000</button>
-        <button class="btn btn-secondary" @click="listClear" :disabled="!listItems.length">Clear</button>
+        <button class="btn btn-primary" :class="{ 'btn-active': lastAction === 'list-create-10k' }" @click="lastAction = 'list-create-10k'; listCreate(10000)">Create 10,000 rows</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'list-create-50k' }" @click="lastAction = 'list-create-50k'; listCreate(50000)">Create 50,000 rows</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'list-update-10th' }" @click="lastAction = 'list-update-10th'; listUpdateEvery10th()" :disabled="!listItems.length">Update every 10th</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'list-swap' }" @click="lastAction = 'list-swap'; listSwapRows()" :disabled="listItems.length < 1000">Swap rows</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'list-append' }" @click="lastAction = 'list-append'; listAppend1000()" :disabled="!listItems.length">Append 1,000</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'list-clear' }" @click="lastAction = 'list-clear'; listClear()" :disabled="!listItems.length">Clear</button>
       </div>
       <div class="metrics">
         <div class="metric">
@@ -141,11 +142,11 @@
     <div class="panel" v-if="currentTab === 'dashboard'">
       <h3 style="margin-bottom: 12px;">Real-time Dashboard (Deep Nested Reactive Updates)</h3>
       <div class="controls">
-        <button class="btn btn-primary" @click="dashStart" :disabled="dashRunning">Start ({{ dashCardCount }} cards)</button>
-        <button class="btn btn-secondary" @click="dashStop" :disabled="!dashRunning">Stop</button>
-        <button class="btn btn-secondary" @click="dashCardCount = 200">200</button>
-        <button class="btn btn-secondary" @click="dashCardCount = 500">500</button>
-        <button class="btn btn-secondary" @click="dashCardCount = 1000">1000</button>
+        <button class="btn btn-primary" :class="{ 'btn-active': lastAction === 'dash-start' }" @click="lastAction = 'dash-start'; dashStart()" :disabled="dashRunning">Start ({{ dashCardCount }} cards)</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'dash-stop' }" @click="lastAction = 'dash-stop'; dashStop()" :disabled="!dashRunning">Stop</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': dashCardCount === 200 }" @click="dashCardCount = 200">200</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': dashCardCount === 500 }" @click="dashCardCount = 500">500</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': dashCardCount === 1000 }" @click="dashCardCount = 1000">1000</button>
         <span style="font-size:11px;color:#888;">80% updated/tick · rAF loop · nested objects</span>
       </div>
       <div class="metrics">
@@ -205,12 +206,12 @@
     <div class="panel" v-if="currentTab === 'tree'">
       <h3 style="margin-bottom: 12px;">Deep Component Tree (Nested Reactivity)</h3>
       <div class="controls">
-        <button class="btn btn-primary" @click="treeGenerate(5, 6)">5 levels x 6 children</button>
-        <button class="btn btn-secondary" @click="treeGenerate(8, 4)">8 levels x 4 children</button>
-        <button class="btn btn-secondary" @click="treeGenerate(10, 3)">10 levels x 3 children</button>
-        <button class="btn btn-secondary" @click="treeUpdateAll" :disabled="!treeData.length">Update All</button>
-        <button class="btn btn-secondary" @click="treeUpdate10Pct" :disabled="!treeData.length">Update 10%</button>
-        <button class="btn btn-secondary" @click="treeUpdateDeep" :disabled="!treeData.length">Update Leaves</button>
+        <button class="btn btn-primary" :class="{ 'btn-active': lastAction === 'tree-5x6' }" @click="lastAction = 'tree-5x6'; treeGenerate(5, 6)">5 levels x 6 children</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'tree-8x4' }" @click="lastAction = 'tree-8x4'; treeGenerate(8, 4)">8 levels x 4 children</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'tree-10x3' }" @click="lastAction = 'tree-10x3'; treeGenerate(10, 3)">10 levels x 3 children</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'tree-update-all' }" @click="lastAction = 'tree-update-all'; treeUpdateAll()" :disabled="!treeData.length">Update All</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'tree-update-10pct' }" @click="lastAction = 'tree-update-10pct'; treeUpdate10Pct()" :disabled="!treeData.length">Update 10%</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'tree-update-deep' }" @click="lastAction = 'tree-update-deep'; treeUpdateDeep()" :disabled="!treeData.length">Update Leaves</button>
       </div>
       <div class="metrics">
         <div class="metric">
@@ -235,10 +236,10 @@
     <div class="panel" v-if="currentTab === 'heavy'">
       <h3 style="margin-bottom: 12px;">Heavy Page Initialization (Computed + Watchers + Forms)</h3>
       <div class="controls">
-        <button class="btn btn-primary" @click="heavyInit(200)">Init 200 Fields</button>
-        <button class="btn btn-secondary" @click="heavyInit(500)">Init 500 Fields</button>
-        <button class="btn btn-secondary" @click="heavyInit(1000)">Init 1000 Fields</button>
-        <button class="btn btn-secondary" @click="heavyUpdateAll" :disabled="!heavyFields.length">Update All</button>
+        <button class="btn btn-primary" :class="{ 'btn-active': lastAction === 'heavy-200' }" @click="lastAction = 'heavy-200'; heavyInit(200)">Init 200 Fields</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'heavy-500' }" @click="lastAction = 'heavy-500'; heavyInit(500)">Init 500 Fields</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'heavy-1000' }" @click="lastAction = 'heavy-1000'; heavyInit(1000)">Init 1000 Fields</button>
+        <button class="btn btn-secondary" :class="{ 'btn-active': lastAction === 'heavy-update' }" @click="lastAction = 'heavy-update'; heavyUpdateAll()" :disabled="!heavyFields.length">Update All</button>
       </div>
       <div class="metrics">
         <div class="metric">
@@ -345,6 +346,7 @@
       data() {
         return {
           currentTab: 'list',
+          lastAction: '',
           logs: [],
           // Test 1: List
           listItems: [],
@@ -715,7 +717,7 @@
             vm.currentTab = e.data.tab;
             return;
           }
-          // Sync actions
+          vm.lastAction = action;
           switch (action) {
             case 'list-create-10k': vm.listCreate(10000); break;
             case 'list-create-50k': vm.listCreate(50000); break;
