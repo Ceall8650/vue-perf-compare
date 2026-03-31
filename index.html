@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vue 2 vs Vue 3 Performance Comparison</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a1a; color: #e0e0e0; }
+
+    .header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      padding: 20px 24px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; }
+    .header h1 span.v2 { color: #e94560; }
+    .header h1 span.vs { color: #666; margin: 0 4px; }
+    .header h1 span.v3 { color: #42b883; }
+
+    .comparison-bar {
+      display: flex;
+      gap: 16px;
+      padding: 12px 24px;
+      background: #111;
+      border-bottom: 1px solid #222;
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+    .comparison-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .comparison-item .label { color: #888; }
+    .comparison-item .v2-val { color: #e94560; font-weight: 600; }
+    .comparison-item .v3-val { color: #42b883; font-weight: 600; }
+    .comparison-item .diff { color: #f39c12; font-weight: 500; font-size: 11px; }
+
+    .sync-controls {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .sync-btn {
+      padding: 6px 14px; border: 1px solid #444; background: #16213e;
+      color: #e0e0e0; cursor: pointer; border-radius: 6px; font-size: 12px;
+      transition: all 0.2s;
+    }
+    .sync-btn:hover { background: #1a1a4e; border-color: #666; }
+    .sync-btn.active { border-color: #42b883; color: #42b883; }
+
+    .frames {
+      display: flex;
+      height: calc(100vh - 110px);
+    }
+    .frame-wrap {
+      flex: 1;
+      position: relative;
+      border-right: 1px solid #333;
+    }
+    .frame-wrap:last-child { border-right: none; }
+    .frame-label {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      z-index: 10;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 10px;
+      pointer-events: none;
+    }
+    .frame-label.v2 { background: rgba(233, 69, 96, 0.2); color: #e94560; }
+    .frame-label.v3 { background: rgba(66, 184, 131, 0.2); color: #42b883; }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #1a1a2e;
+    }
+
+    .results-panel {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #111;
+      border-top: 2px solid #333;
+      padding: 16px 24px;
+      z-index: 100;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .results-panel.open { display: block; }
+    .results-panel h3 { font-size: 14px; margin-bottom: 8px; color: #f39c12; }
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 4px 0;
+      font-size: 13px;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .result-row .op { color: #aaa; min-width: 200px; }
+    .result-row .v2-time { color: #e94560; min-width: 100px; text-align: right; }
+    .result-row .v3-time { color: #42b883; min-width: 100px; text-align: right; }
+    .result-row .speedup { color: #f39c12; font-weight: 600; min-width: 100px; }
+
+    .toggle-results {
+      position: fixed; bottom: 12px; right: 12px; z-index: 101;
+      padding: 8px 16px; background: #f39c12; color: #000; border: none;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
+    }
+
+    .info-banner {
+      padding: 10px 24px;
+      background: linear-gradient(90deg, rgba(233,69,96,0.1), rgba(66,184,131,0.1));
+      border-bottom: 1px solid #222;
+      font-size: 12px;
+      color: #888;
+      text-align: center;
+    }
+    .info-banner strong { color: #f39c12; }
+
+    @media (max-width: 768px) {
+      .frames { flex-direction: column; height: auto; }
+      .frame-wrap { height: 600px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>
+      <span class="v2">Vue 2</span>
+      <span class="vs">vs</span>
+      <span class="v3">Vue 3</span>
+      Performance Benchmark
+    </h1>
+    <div class="sync-controls">
+      <button class="sync-btn" onclick="syncAction('list')">1. List</button>
+      <button class="sync-btn" onclick="syncAction('dashboard')">2. Dashboard</button>
+      <button class="sync-btn" onclick="syncAction('tree')">3. Tree</button>
+      <button class="sync-btn" onclick="syncAction('heavy')">4. Heavy Init</button>
+      <button class="sync-btn" onclick="syncAction('bundle')">5. Bundle</button>
+    </div>
+  </div>
+
+  <div class="info-banner">
+    <strong>How to use:</strong> Click the same buttons on both sides to compare. Or use the tabs above to switch both panels simultaneously. Lower ms = better performance.
+  </div>
+
+  <div class="comparison-bar" id="comparisonBar">
+    <div class="comparison-item">
+      <span class="label">Latest:</span>
+      <span class="v2-val" id="latestV2">-</span>
+      <span class="label">vs</span>
+      <span class="v3-val" id="latestV3">-</span>
+      <span class="diff" id="latestDiff"></span>
+    </div>
+  </div>
+
+  <div class="frames">
+    <div class="frame-wrap">
+      <div class="frame-label v2">Vue 2.7</div>
+      <iframe id="vue2Frame" src="vue2.html"></iframe>
+    </div>
+    <div class="frame-wrap">
+      <div class="frame-label v3">Vue 3.4</div>
+      <iframe id="vue3Frame" src="vue3.html"></iframe>
+    </div>
+  </div>
+
+  <button class="toggle-results" onclick="toggleResults()">Results Log</button>
+
+  <div class="results-panel" id="resultsPanel">
+    <h3>Side-by-Side Results</h3>
+    <div id="resultsList"></div>
+  </div>
+
+  <script>
+    const metrics = { vue2: {}, vue3: {} };
+    const results = [];
+
+    function syncAction(tab) {
+      const v2 = document.getElementById('vue2Frame').contentWindow;
+      const v3 = document.getElementById('vue3Frame').contentWindow;
+
+      // Switch tabs on both iframes
+      try { v2.document.querySelector(`[onclick*="'${tab}'"]`)?.click(); } catch(e) {}
+      try {
+        const tabs = v3.document.querySelectorAll('.tab');
+        tabs.forEach(t => {
+          if (t.textContent.toLowerCase().includes(tab.substring(0, 4))) t.click();
+        });
+      } catch(e) {}
+    }
+
+    // Listen for metrics from both iframes
+    window.addEventListener('message', (e) => {
+      if (!e.data || !e.data.type) return;
+
+      const msMatch = e.data.msg?.match(/in (\d+)ms/);
+      const ms = msMatch ? parseInt(msMatch[1]) : null;
+
+      if (e.data.type === 'vue2-metric') {
+        document.getElementById('latestV2').textContent = ms ? ms + 'ms' : e.data.msg;
+        metrics.vue2[Date.now()] = { tab: e.data.tab, msg: e.data.msg, ms };
+        checkComparison('vue2', e.data.msg, ms);
+      }
+      if (e.data.type === 'vue3-metric') {
+        document.getElementById('latestV3').textContent = ms ? ms + 'ms' : e.data.msg;
+        metrics.vue3[Date.now()] = { tab: e.data.tab, msg: e.data.msg, ms };
+        checkComparison('vue3', e.data.msg, ms);
+      }
+    });
+
+    const pendingComparisons = {};
+
+    function checkComparison(source, msg, ms) {
+      // Extract operation type from message
+      const opMatch = msg.match(/^(.+?) in \d+ms$/);
+      if (!opMatch) return;
+      const op = opMatch[1];
+
+      if (!pendingComparisons[op]) {
+        pendingComparisons[op] = { source, ms, time: Date.now() };
+        // Timeout after 5s
+        setTimeout(() => { delete pendingComparisons[op]; }, 5000);
+        return;
+      }
+
+      const pending = pendingComparisons[op];
+      if (pending.source === source) {
+        // Same source, update
+        pending.ms = ms;
+        return;
+      }
+
+      // We have both!
+      const v2ms = source === 'vue2' ? ms : pending.ms;
+      const v3ms = source === 'vue3' ? ms : pending.ms;
+      delete pendingComparisons[op];
+
+      if (v2ms && v3ms) {
+        const speedup = (v2ms / v3ms).toFixed(1);
+        const pct = Math.round((1 - v3ms / v2ms) * 100);
+        document.getElementById('latestDiff').textContent =
+          `Vue 3 is ${speedup}x faster (${pct}% less time)`;
+
+        addResult(op, v2ms, v3ms, speedup);
+      }
+    }
+
+    function addResult(op, v2ms, v3ms, speedup) {
+      const list = document.getElementById('resultsList');
+      const row = document.createElement('div');
+      row.className = 'result-row';
+      row.innerHTML = `
+        <span class="op">${op}</span>
+        <span class="v2-time">${v2ms}ms</span>
+        <span class="v3-time">${v3ms}ms</span>
+        <span class="speedup">${speedup}x faster</span>
+      `;
+      list.insertBefore(row, list.firstChild);
+    }
+
+    function toggleResults() {
+      document.getElementById('resultsPanel').classList.toggle('open');
+    }
+  </script>
+</body>
+</html>
