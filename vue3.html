@@ -313,7 +313,10 @@
         }
 
         // === Test 3: Tree ===
-        const treeData = shallowRef([]);
+        // Use ref() (NOT shallowRef) — Vue 3's Proxy deeply tracks node.count changes
+        // This is the correct Vue 3 pattern: Proxy-based lazy tracking
+        // vs Vue 2's Object.defineProperty recursive walk at init time
+        const treeData = ref([]);
         const treeMetrics = reactive({ generate: '-', update: '-' });
         const treeNodeCount = ref(0);
 
@@ -347,6 +350,7 @@
 
         function treeUpdateAll() {
           const start = performance.now();
+          // Vue 3: direct mutation — Proxy automatically detects n.count changes
           const walk = (nodes) => {
             nodes.forEach(n => {
               n.count = Math.floor(Math.random() * 100);
@@ -354,7 +358,6 @@
             });
           };
           walk(treeData.value);
-          triggerRef(treeData);
           nextTick(() => {
             const elapsed = Math.round(performance.now() - start);
             treeMetrics.update = elapsed;
@@ -374,7 +377,6 @@
             });
           };
           walkDeep(treeData.value);
-          triggerRef(treeData);
           nextTick(() => {
             const elapsed = Math.round(performance.now() - start);
             treeMetrics.update = elapsed;
@@ -431,6 +433,34 @@
         }
 
         onBeforeUnmount(() => { dashStop(); });
+
+        // Listen for sync actions from parent
+        window.addEventListener('message', (e) => {
+          if (!e.data || e.data.type !== 'sync-action') return;
+          const action = e.data.action;
+          if (action === 'switch-tab') { currentTab.value = e.data.tab; return; }
+          switch (action) {
+            case 'list-create-10k': listCreate(10000); break;
+            case 'list-create-50k': listCreate(50000); break;
+            case 'list-update-10th': listUpdateEvery10th(); break;
+            case 'list-swap': listSwapRows(); break;
+            case 'list-append': listAppend1000(); break;
+            case 'list-clear': listClear(); break;
+            case 'dash-start-200': dashCardCount.value = 200; nextTick(() => dashStart()); break;
+            case 'dash-start-500': dashCardCount.value = 500; nextTick(() => dashStart()); break;
+            case 'dash-start-1000': dashCardCount.value = 1000; nextTick(() => dashStart()); break;
+            case 'dash-stop': dashStop(); break;
+            case 'tree-5x6': treeGenerate(5, 6); break;
+            case 'tree-8x4': treeGenerate(8, 4); break;
+            case 'tree-10x3': treeGenerate(10, 3); break;
+            case 'tree-update-all': treeUpdateAll(); break;
+            case 'tree-update-deep': treeUpdateDeep(); break;
+            case 'heavy-200': heavyInit(200); break;
+            case 'heavy-500': heavyInit(500); break;
+            case 'heavy-1000': heavyInit(1000); break;
+            case 'heavy-update': heavyUpdateAll(); break;
+          }
+        });
 
         return {
           currentTab, logs, addLog,

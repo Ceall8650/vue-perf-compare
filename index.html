@@ -43,15 +43,30 @@
     .comparison-item .diff { color: #f39c12; font-weight: 500; font-size: 11px; }
 
     .sync-controls {
-      display: flex; gap: 8px; align-items: center;
+      display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
     }
     .sync-btn {
-      padding: 6px 14px; border: 1px solid #444; background: #16213e;
-      color: #e0e0e0; cursor: pointer; border-radius: 6px; font-size: 12px;
-      transition: all 0.2s;
+      padding: 5px 12px; border: 1px solid #444; background: #16213e;
+      color: #e0e0e0; cursor: pointer; border-radius: 6px; font-size: 11px;
+      transition: all 0.2s; white-space: nowrap;
     }
     .sync-btn:hover { background: #1a1a4e; border-color: #666; }
     .sync-btn.active { border-color: #42b883; color: #42b883; }
+    .sync-btn.primary { background: #f39c12; color: #000; border-color: #f39c12; font-weight: 600; }
+    .sync-btn.primary:hover { background: #e67e22; }
+    .sync-btn.danger { border-color: #e94560; color: #e94560; }
+    .sync-btn.danger:hover { background: #2a0e0e; }
+    .sync-divider { width: 1px; height: 24px; background: #333; margin: 0 4px; }
+
+    .sync-panel {
+      padding: 8px 24px;
+      background: #0d0d1a;
+      border-bottom: 1px solid #222;
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    }
+    .sync-panel .sync-label {
+      font-size: 11px; color: #f39c12; font-weight: 600; margin-right: 4px;
+    }
 
     .frames {
       display: flex;
@@ -143,16 +158,55 @@
       Performance Benchmark
     </h1>
     <div class="sync-controls">
-      <button class="sync-btn" onclick="syncAction('list')">1. List</button>
-      <button class="sync-btn" onclick="syncAction('dashboard')">2. Dashboard</button>
-      <button class="sync-btn" onclick="syncAction('tree')">3. Tree</button>
-      <button class="sync-btn" onclick="syncAction('heavy')">4. Heavy Init</button>
-      <button class="sync-btn" onclick="syncAction('bundle')">5. Bundle</button>
+      <button class="sync-btn" onclick="switchTab('list')" id="tab-list">1. List</button>
+      <button class="sync-btn" onclick="switchTab('dashboard')" id="tab-dashboard">2. Dashboard</button>
+      <button class="sync-btn" onclick="switchTab('tree')" id="tab-tree">3. Tree</button>
+      <button class="sync-btn" onclick="switchTab('heavy')" id="tab-heavy">4. Heavy Init</button>
+      <button class="sync-btn" onclick="switchTab('bundle')" id="tab-bundle">5. Bundle</button>
+    </div>
+  </div>
+
+  <div class="sync-panel" id="syncPanel">
+    <span class="sync-label">▶ Sync Controls:</span>
+    <!-- List controls -->
+    <div id="sync-list" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button class="sync-btn primary" onclick="syncBoth('list-create-10k')">Create 10K</button>
+      <button class="sync-btn primary" onclick="syncBoth('list-create-50k')">Create 50K</button>
+      <button class="sync-btn" onclick="syncBoth('list-update-10th')">Update 10th</button>
+      <button class="sync-btn" onclick="syncBoth('list-swap')">Swap</button>
+      <button class="sync-btn" onclick="syncBoth('list-append')">Append 1K</button>
+      <button class="sync-btn danger" onclick="syncBoth('list-clear')">Clear</button>
+    </div>
+    <!-- Dashboard controls -->
+    <div id="sync-dashboard" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button class="sync-btn primary" onclick="syncBoth('dash-start-200')">Start 200</button>
+      <button class="sync-btn primary" onclick="syncBoth('dash-start-500')">Start 500</button>
+      <button class="sync-btn primary" onclick="syncBoth('dash-start-1000')">Start 1000</button>
+      <button class="sync-btn danger" onclick="syncBoth('dash-stop')">Stop Both</button>
+    </div>
+    <!-- Tree controls -->
+    <div id="sync-tree" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button class="sync-btn primary" onclick="syncBoth('tree-5x6')">5×6</button>
+      <button class="sync-btn primary" onclick="syncBoth('tree-8x4')">8×4</button>
+      <button class="sync-btn primary" onclick="syncBoth('tree-10x3')">10×3</button>
+      <button class="sync-btn" onclick="syncBoth('tree-update-all')">Update All</button>
+      <button class="sync-btn" onclick="syncBoth('tree-update-deep')">Update Deep</button>
+    </div>
+    <!-- Heavy controls -->
+    <div id="sync-heavy" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button class="sync-btn primary" onclick="syncBoth('heavy-200')">Init 200</button>
+      <button class="sync-btn primary" onclick="syncBoth('heavy-500')">Init 500</button>
+      <button class="sync-btn primary" onclick="syncBoth('heavy-1000')">Init 1000</button>
+      <button class="sync-btn" onclick="syncBoth('heavy-update')">Update All</button>
+    </div>
+    <!-- Bundle controls -->
+    <div id="sync-bundle" style="display:none;gap:6px;align-items:center;">
+      <span style="font-size:11px;color:#888;">Static comparison — no actions needed</span>
     </div>
   </div>
 
   <div class="info-banner">
-    <strong>How to use:</strong> Click the same buttons on both sides to compare. Or use the tabs above to switch both panels simultaneously. Lower ms = better performance.
+    <strong>How to use:</strong> Use the <span style="color:#f39c12">▶ Sync Controls</span> bar to run the same operation on both Vue 2 & Vue 3 simultaneously. Lower ms = better performance.
   </div>
 
   <div class="comparison-bar" id="comparisonBar">
@@ -186,20 +240,41 @@
   <script>
     const metrics = { vue2: {}, vue3: {} };
     const results = [];
+    let currentSyncTab = 'list';
+    const allTabs = ['list', 'dashboard', 'tree', 'heavy', 'bundle'];
 
-    function syncAction(tab) {
-      const v2 = document.getElementById('vue2Frame').contentWindow;
-      const v3 = document.getElementById('vue3Frame').contentWindow;
-
-      // Switch tabs on both iframes
-      try { v2.document.querySelector(`[onclick*="'${tab}'"]`)?.click(); } catch(e) {}
-      try {
-        const tabs = v3.document.querySelectorAll('.tab');
-        tabs.forEach(t => {
-          if (t.textContent.toLowerCase().includes(tab.substring(0, 4))) t.click();
-        });
-      } catch(e) {}
+    function getFrames() {
+      return [
+        document.getElementById('vue2Frame').contentWindow,
+        document.getElementById('vue3Frame').contentWindow
+      ];
     }
+
+    function switchTab(tab) {
+      currentSyncTab = tab;
+      // Update tab button styles
+      allTabs.forEach(t => {
+        const btn = document.getElementById('tab-' + t);
+        if (btn) btn.classList.toggle('active', t === tab);
+        const panel = document.getElementById('sync-' + t);
+        if (panel) panel.style.display = t === tab ? 'flex' : 'none';
+      });
+      // Send to both iframes
+      const [v2, v3] = getFrames();
+      const msg = { type: 'sync-action', action: 'switch-tab', tab };
+      try { v2.postMessage(msg, '*'); } catch(e) {}
+      try { v3.postMessage(msg, '*'); } catch(e) {}
+    }
+
+    function syncBoth(action) {
+      const [v2, v3] = getFrames();
+      const msg = { type: 'sync-action', action };
+      try { v2.postMessage(msg, '*'); } catch(e) {}
+      try { v3.postMessage(msg, '*'); } catch(e) {}
+    }
+
+    // Initialize first tab as active
+    switchTab('list');
 
     // Listen for metrics from both iframes
     window.addEventListener('message', (e) => {

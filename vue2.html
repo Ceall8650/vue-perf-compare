@@ -668,6 +668,40 @@
       },
       beforeDestroy() {
         this.dashStop();
+      },
+      mounted() {
+        const vm = this;
+        window.addEventListener('message', function(e) {
+          if (!e.data || e.data.type !== 'sync-action') return;
+          const action = e.data.action;
+          // Tab switching
+          if (action === 'switch-tab') {
+            vm.currentTab = e.data.tab;
+            return;
+          }
+          // Sync actions
+          switch (action) {
+            case 'list-create-10k': vm.listCreate(10000); break;
+            case 'list-create-50k': vm.listCreate(50000); break;
+            case 'list-update-10th': vm.listUpdateEvery10th(); break;
+            case 'list-swap': vm.listSwapRows(); break;
+            case 'list-append': vm.listAppend1000(); break;
+            case 'list-clear': vm.listClear(); break;
+            case 'dash-start-200': vm.dashCardCount = 200; vm.$nextTick(function() { vm.dashStart(); }); break;
+            case 'dash-start-500': vm.dashCardCount = 500; vm.$nextTick(function() { vm.dashStart(); }); break;
+            case 'dash-start-1000': vm.dashCardCount = 1000; vm.$nextTick(function() { vm.dashStart(); }); break;
+            case 'dash-stop': vm.dashStop(); break;
+            case 'tree-5x6': vm.treeGenerate(5, 6); break;
+            case 'tree-8x4': vm.treeGenerate(8, 4); break;
+            case 'tree-10x3': vm.treeGenerate(10, 3); break;
+            case 'tree-update-all': vm.treeUpdateAll(); break;
+            case 'tree-update-deep': vm.treeUpdateDeep(); break;
+            case 'heavy-200': vm.heavyInit(200); break;
+            case 'heavy-500': vm.heavyInit(500); break;
+            case 'heavy-1000': vm.heavyInit(1000); break;
+            case 'heavy-update': vm.heavyUpdateAll(); break;
+          }
+        });
       }
     });
   </script>
