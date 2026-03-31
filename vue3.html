@@ -49,7 +49,13 @@
     .spark-bar { flex: 1; background: #42b883; border-radius: 1px; opacity: 0.7; min-width: 0; }
     .tree-node { padding-left: 20px; border-left: 1px solid #333; margin-left: 8px; }
     .tree-item { padding: 3px 8px; margin: 2px 0; background: #0f3460; border-radius: 4px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
-    .tree-item .count { color: #42b883; font-weight: 600; }
+    .tree-item .count { color: #42b883; font-weight: 600; min-width: 32px; text-align: right; }
+    .tree-item .count.count-high { color: #f39c12; }
+    .tree-icon { font-size: 10px; margin-right: 4px; }
+    .tree-label { color: #ccc; }
+    .tree-sep { color: #333; margin: 0 6px; }
+    .tree-badge { font-size: 9px; color: #555; background: #1a1a2e; padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
+    .tree-meta { font-size: 9px; color: #444; margin-left: 4px; }
     .progress-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; margin-top: 8px; }
     .progress-fill { height: 100%; background: #42b883; transition: width 0.3s; }
     .log { background: #0a0a1a; border: 1px solid #333; border-radius: 6px; padding: 12px; max-height: 120px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; margin-top: 12px; }
@@ -77,15 +83,21 @@
   <script>
     const { createApp, ref, reactive, computed, nextTick, onBeforeUnmount, shallowRef, triggerRef } = Vue;
 
-    // Tree Node Component
+    // Tree Node Component — rich template with lots of static content
+    // Vue 3 optimization: static nodes are hoisted & reused, patch flags skip them during diff
+    // Vue 2 must diff ALL nodes (static + dynamic) every render
     const TreeNode = {
       name: 'TreeNode',
       props: ['node'],
       template: `
-        <div>
+        <div class="tree-wrapper">
           <div class="tree-item">
-            <span>{{ node.label }}</span>
-            <span class="count">{{ node.count }}</span>
+            <span class="tree-icon">&#128193;</span>
+            <span class="tree-label">{{ node.label }}</span>
+            <span class="tree-sep">|</span>
+            <span class="count" :class="{ 'count-high': node.count > 50 }">{{ node.count }}</span>
+            <span class="tree-badge">node</span>
+            <span class="tree-meta">id:{{ node.id }}</span>
           </div>
           <div class="tree-node" v-if="node.children?.length">
             <TreeNode v-for="child in node.children" :key="child.id" :node="child" />
@@ -204,7 +216,9 @@
         }
 
         // === Test 2: Dashboard ===
-        const dashCards = shallowRef([]);
+        // Vue 3: deep ref — Proxy tracks each card.stats.cpu.current individually
+        // Only components reading changed properties re-render (fine-grained)
+        const dashCards = ref([]);
         const dashRunning = ref(false);
         const dashCardCount = ref(200);
         const dashMetrics = reactive({ avgUpdate: '-', totalUpdates: 0, droppedFrames: 0, fps: '-' });
@@ -273,8 +287,8 @@
                 ? 'critical'
                 : (newCpu > 70 || card.stats.memory.percent > 75 ? 'warning' : 'normal');
             }
-            // Single triggerRef — Vue 3 batches all updates efficiently
-            triggerRef(dashCards);
+            // Vue 3: NO triggerRef needed — Proxy detects each mutation automatically
+            // Vue 3 scheduler batches all triggered effects into a single render cycle
             nextTick(() => {
               const elapsed = performance.now() - start;
               dashUpdateTimes.push(elapsed);
@@ -351,9 +365,10 @@
         function treeUpdateAll() {
           const start = performance.now();
           // Vue 3: direct mutation — Proxy automatically detects n.count changes
+          // Only components reading the mutated property re-render
           const walk = (nodes) => {
             nodes.forEach(n => {
-              n.count = Math.floor(Math.random() * 100);
+              n.count = (n.count || 0) + 1; // increment to make changes visually obvious
               if (n.children) walk(n.children);
             });
           };
@@ -370,7 +385,7 @@
           const walkDeep = (nodes) => {
             nodes.forEach(n => {
               if (!n.children || n.children.length === 0) {
-                n.count = Math.floor(Math.random() * 100);
+                n.count = (n.count || 0) + 10; // larger increment for leaf nodes
               } else {
                 walkDeep(n.children);
               }
@@ -381,6 +396,28 @@
             const elapsed = Math.round(performance.now() - start);
             treeMetrics.update = elapsed;
             addLog(`Updated deepest leaf nodes in ${elapsed}ms`);
+          });
+        }
+
+        // Vue 3 advantage: only 10% of components re-render (fine-grained Proxy tracking)
+        // vs Vue 2 which replaces the array and diffs the entire tree
+        function treeUpdate10Pct() {
+          const start = performance.now();
+          let updated = 0;
+          const walk = (nodes) => {
+            nodes.forEach(n => {
+              if (Math.random() < 0.1) {
+                n.count = (n.count || 0) + 5;
+                updated++;
+              }
+              if (n.children) walk(n.children);
+            });
+          };
+          walk(treeData.value);
+          nextTick(() => {
+            const elapsed = Math.round(performance.now() - start);
+            treeMetrics.update = elapsed;
+            addLog(`Updated ${updated}/${treeNodeCount.value} (10%) tree nodes in ${elapsed}ms`);
           });
         }
 
@@ -454,6 +491,7 @@
             case 'tree-8x4': treeGenerate(8, 4); break;
             case 'tree-10x3': treeGenerate(10, 3); break;
             case 'tree-update-all': treeUpdateAll(); break;
+            case 'tree-update-10pct': treeUpdate10Pct(); break;
             case 'tree-update-deep': treeUpdateDeep(); break;
             case 'heavy-200': heavyInit(200); break;
             case 'heavy-500': heavyInit(500); break;
@@ -466,7 +504,7 @@
           currentTab, logs, addLog,
           listItems, listMetrics, listCreate, listUpdateEvery10th, listSwapRows, listAppend1000, listClear,
           dashCards, dashRunning, dashCardCount, dashMetrics, dashStart, dashStop,
-          treeData, treeMetrics, treeNodeCount, treeGenerate, treeUpdateAll, treeUpdateDeep,
+          treeData, treeMetrics, treeNodeCount, treeGenerate, treeUpdateAll, treeUpdateDeep, treeUpdate10Pct,
           heavyFields, heavyMetrics, heavySum, heavyInit, heavyOnInput, heavyUpdateAll
         };
       },
@@ -602,8 +640,9 @@
               <button class="btn btn-primary" @click="treeGenerate(5, 6)">5 levels x 6 children</button>
               <button class="btn btn-secondary" @click="treeGenerate(8, 4)">8 levels x 4 children</button>
               <button class="btn btn-secondary" @click="treeGenerate(10, 3)">10 levels x 3 children</button>
-              <button class="btn btn-secondary" @click="treeUpdateAll" :disabled="!treeData.length">Update All Counts</button>
-              <button class="btn btn-secondary" @click="treeUpdateDeep" :disabled="!treeData.length">Update Deepest Only</button>
+              <button class="btn btn-secondary" @click="treeUpdateAll" :disabled="!treeData.length">Update All</button>
+              <button class="btn btn-secondary" @click="treeUpdate10Pct" :disabled="!treeData.length">Update 10%</button>
+              <button class="btn btn-secondary" @click="treeUpdateDeep" :disabled="!treeData.length">Update Leaves</button>
             </div>
             <div class="metrics">
               <div class="metric">

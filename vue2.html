@@ -49,7 +49,13 @@
     .spark-bar { flex: 1; background: #e94560; border-radius: 1px; opacity: 0.7; min-width: 0; }
     .tree-node { padding-left: 20px; border-left: 1px solid #333; margin-left: 8px; }
     .tree-item { padding: 3px 8px; margin: 2px 0; background: #0f3460; border-radius: 4px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
-    .tree-item .count { color: #e94560; font-weight: 600; }
+    .tree-item .count { color: #e94560; font-weight: 600; min-width: 32px; text-align: right; }
+    .tree-item .count.count-high { color: #f39c12; }
+    .tree-icon { font-size: 10px; margin-right: 4px; }
+    .tree-label { color: #ccc; }
+    .tree-sep { color: #333; margin: 0 6px; }
+    .tree-badge { font-size: 9px; color: #555; background: #1a1a2e; padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
+    .tree-meta { font-size: 9px; color: #444; margin-left: 4px; }
     .progress-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; margin-top: 8px; }
     .progress-fill { height: 100%; background: #e94560; transition: width 0.3s; }
     .log { background: #0a0a1a; border: 1px solid #333; border-radius: 6px; padding: 12px; max-height: 120px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; margin-top: 12px; }
@@ -202,8 +208,9 @@
         <button class="btn btn-primary" @click="treeGenerate(5, 6)">5 levels x 6 children</button>
         <button class="btn btn-secondary" @click="treeGenerate(8, 4)">8 levels x 4 children</button>
         <button class="btn btn-secondary" @click="treeGenerate(10, 3)">10 levels x 3 children</button>
-        <button class="btn btn-secondary" @click="treeUpdateAll" :disabled="!treeData.length">Update All Counts</button>
-        <button class="btn btn-secondary" @click="treeUpdateDeep" :disabled="!treeData.length">Update Deepest Only</button>
+        <button class="btn btn-secondary" @click="treeUpdateAll" :disabled="!treeData.length">Update All</button>
+        <button class="btn btn-secondary" @click="treeUpdate10Pct" :disabled="!treeData.length">Update 10%</button>
+        <button class="btn btn-secondary" @click="treeUpdateDeep" :disabled="!treeData.length">Update Leaves</button>
       </div>
       <div class="metrics">
         <div class="metric">
@@ -305,13 +312,19 @@
 
   <script>
     // Tree Node Component
+    // Tree Node Component — same rich template as Vue 3 for fair comparison
+    // Vue 2 must diff ALL nodes (static + dynamic) every render cycle
     Vue.component('tree-node', {
       props: ['node'],
       template: `
-        <div>
+        <div class="tree-wrapper">
           <div class="tree-item">
-            <span>{{ node.label }}</span>
-            <span class="count">{{ node.count }}</span>
+            <span class="tree-icon">&#128193;</span>
+            <span class="tree-label">{{ node.label }}</span>
+            <span class="tree-sep">|</span>
+            <span class="count" :class="{ 'count-high': node.count > 50 }">{{ node.count }}</span>
+            <span class="tree-badge">node</span>
+            <span class="tree-meta">id:{{ node.id }}</span>
           </div>
           <div class="tree-node" v-if="node.children && node.children.length">
             <tree-node v-for="child in node.children" :key="child.id" :node="child"></tree-node>
@@ -592,12 +605,13 @@
           const start = performance.now();
           const walk = (nodes) => {
             nodes.forEach(n => {
-              n.count = Math.floor(Math.random() * 100);
+              n.count = (n.count || 0) + 1; // increment to make changes visually obvious
               if (n.children) walk(n.children);
             });
           };
           walk(this.treeData);
-          // Vue 2 deep reactivity issue: force re-render
+          // Vue 2: must replace array to ensure reactivity triggers for nested changes
+          // Object.defineProperty cannot detect deep mutations reliably in all cases
           this.treeData = [...this.treeData];
           this.$nextTick(() => {
             const elapsed = Math.round(performance.now() - start);
@@ -610,7 +624,7 @@
           const walkDeep = (nodes) => {
             nodes.forEach(n => {
               if (!n.children || n.children.length === 0) {
-                n.count = Math.floor(Math.random() * 100);
+                n.count = (n.count || 0) + 10; // larger increment for leaf nodes
               } else {
                 walkDeep(n.children);
               }
@@ -622,6 +636,28 @@
             const elapsed = Math.round(performance.now() - start);
             this.treeMetrics.update = elapsed;
             this.addLog(`Updated deepest leaf nodes in ${elapsed}ms`);
+          });
+        },
+        // Vue 2: even for 10% update, must replace the entire array
+        // This triggers full v-for diffing for ALL nodes, not just the 10% changed
+        treeUpdate10Pct() {
+          const start = performance.now();
+          let updated = 0;
+          const walk = (nodes) => {
+            nodes.forEach(n => {
+              if (Math.random() < 0.1) {
+                n.count = (n.count || 0) + 5;
+                updated++;
+              }
+              if (n.children) walk(n.children);
+            });
+          };
+          walk(this.treeData);
+          this.treeData = [...this.treeData];
+          this.$nextTick(() => {
+            const elapsed = Math.round(performance.now() - start);
+            this.treeMetrics.update = elapsed;
+            this.addLog(`Updated ${updated}/${this.treeNodeCount} (10%) tree nodes in ${elapsed}ms`);
           });
         },
 
@@ -695,6 +731,7 @@
             case 'tree-8x4': vm.treeGenerate(8, 4); break;
             case 'tree-10x3': vm.treeGenerate(10, 3); break;
             case 'tree-update-all': vm.treeUpdateAll(); break;
+            case 'tree-update-10pct': vm.treeUpdate10Pct(); break;
             case 'tree-update-deep': vm.treeUpdateDeep(); break;
             case 'heavy-200': vm.heavyInit(200); break;
             case 'heavy-500': vm.heavyInit(500); break;
