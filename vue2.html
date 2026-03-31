@@ -30,10 +30,23 @@
     td { padding: 6px 12px; border-bottom: 1px solid #222; }
     tr:hover td { background: #1a1a3e; }
     .table-wrap { max-height: 350px; overflow-y: auto; border-radius: 6px; border: 1px solid #333; }
-    .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-    .dashboard-card { background: #0f3460; border-radius: 8px; padding: 12px; text-align: center; transition: background 0.1s; }
-    .dashboard-card .value { font-size: 20px; font-weight: 700; }
-    .dashboard-card .label { font-size: 11px; color: #888; margin-top: 4px; }
+    .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+    .dashboard-card { background: #0f3460; border-radius: 8px; padding: 10px; transition: background 0.1s; }
+    .dashboard-card.warning { background: #2a1a0e; }
+    .dashboard-card.critical { background: #2a0e0e; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .card-header .label { font-size: 11px; color: #ccc; font-weight: 600; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .status-dot.normal { background: #4fc08d; }
+    .status-dot.warning { background: #f39c12; }
+    .status-dot.critical { background: #e94560; }
+    .stat-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; font-size: 11px; }
+    .stat-row .stat-label { color: #666; width: 30px; }
+    .stat-row .stat-value { color: #ccc; width: 42px; text-align: right; font-weight: 600; font-size: 12px; }
+    .mini-bar { flex: 1; height: 4px; background: #1a1a2e; border-radius: 2px; overflow: hidden; }
+    .mini-bar div { height: 100%; border-radius: 2px; transition: none; }
+    .sparkline { display: flex; align-items: flex-end; gap: 1px; height: 24px; margin-top: 6px; }
+    .spark-bar { flex: 1; background: #e94560; border-radius: 1px; opacity: 0.7; min-width: 0; }
     .tree-node { padding-left: 20px; border-left: 1px solid #333; margin-left: 8px; }
     .tree-item { padding: 3px 8px; margin: 2px 0; background: #0f3460; border-radius: 4px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
     .tree-item .count { color: #e94560; font-weight: 600; }
@@ -120,13 +133,14 @@
 
     <!-- Test 2: Dashboard -->
     <div class="panel" v-if="currentTab === 'dashboard'">
-      <h3 style="margin-bottom: 12px;">Real-time Dashboard (Frequent Reactive Updates)</h3>
+      <h3 style="margin-bottom: 12px;">Real-time Dashboard (Deep Nested Reactive Updates)</h3>
       <div class="controls">
-        <button class="btn btn-primary" @click="dashStart" :disabled="dashRunning">Start ({{ dashCardCount }} cards, {{ dashInterval }}ms interval)</button>
+        <button class="btn btn-primary" @click="dashStart" :disabled="dashRunning">Start ({{ dashCardCount }} cards)</button>
         <button class="btn btn-secondary" @click="dashStop" :disabled="!dashRunning">Stop</button>
-        <button class="btn btn-secondary" @click="dashCardCount = 100">100 Cards</button>
-        <button class="btn btn-secondary" @click="dashCardCount = 500">500 Cards</button>
-        <button class="btn btn-secondary" @click="dashCardCount = 1000">1000 Cards</button>
+        <button class="btn btn-secondary" @click="dashCardCount = 200">200</button>
+        <button class="btn btn-secondary" @click="dashCardCount = 500">500</button>
+        <button class="btn btn-secondary" @click="dashCardCount = 1000">1000</button>
+        <span style="font-size:11px;color:#888;">80% updated/tick · rAF loop · nested objects</span>
       </div>
       <div class="metrics">
         <div class="metric">
@@ -148,11 +162,34 @@
       </div>
       <div class="dashboard-grid">
         <div class="dashboard-card" v-for="card in dashCards" :key="card.id"
+             :class="card.status"
              :style="{ borderLeft: '3px solid ' + card.color }">
-          <div class="value" :style="{ color: card.color }">{{ card.value }}</div>
-          <div class="label">{{ card.label }}</div>
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: card.progress + '%', background: card.color }"></div>
+          <div class="card-header">
+            <span class="label">{{ card.label }}</span>
+            <span class="status-dot" :class="card.status"></span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">CPU</span>
+            <span class="stat-value" :style="{ color: card.stats.cpu.current > 80 ? '#e94560' : '#4fc08d' }">{{ card.stats.cpu.current }}%</span>
+            <div class="mini-bar"><div :style="{ width: card.stats.cpu.current + '%', background: card.stats.cpu.current > 80 ? '#e94560' : '#4fc08d' }"></div></div>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">MEM</span>
+            <span class="stat-value" :style="{ color: card.stats.memory.percent > 85 ? '#e94560' : '#3498db' }">{{ card.stats.memory.percent }}%</span>
+            <div class="mini-bar"><div :style="{ width: card.stats.memory.percent + '%', background: card.stats.memory.percent > 85 ? '#e94560' : '#3498db' }"></div></div>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">NET</span>
+            <span class="stat-value">{{ card.stats.network.latency }}ms</span>
+            <div class="mini-bar"><div :style="{ width: Math.min(card.stats.network.latency, 100) + '%', background: card.stats.network.latency > 80 ? '#f39c12' : '#1abc9c' }"></div></div>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">DSK</span>
+            <span class="stat-value">{{ card.stats.disk.iops }}</span>
+          </div>
+          <div class="sparkline">
+            <div class="spark-bar" v-for="(h, hi) in card.history" :key="hi"
+                 :style="{ height: h + '%' }"></div>
           </div>
         </div>
       </div>
@@ -302,13 +339,11 @@
           // Test 2: Dashboard
           dashCards: [],
           dashRunning: false,
-          dashInterval: 50,
           dashCardCount: 200,
           dashMetrics: { avgUpdate: '-', totalUpdates: 0, droppedFrames: 0, fps: '-' },
-          dashTimerId: null,
+          dashRafId: null,
           dashUpdateTimes: [],
           dashFpsTimer: null,
-          dashFrameCount: 0,
           // Test 3: Tree
           treeData: [],
           treeMetrics: { generate: '-', update: '-' },
@@ -420,70 +455,108 @@
         },
 
         // === Test 2: Dashboard ===
+        dashCreateCard(i) {
+          const history = [];
+          for (let h = 0; h < 12; h++) history.push(Math.floor(Math.random() * 100));
+          return {
+            id: i,
+            label: 'Server-' + i,
+            color: colors[i % colors.length],
+            status: 'normal',
+            stats: {
+              cpu: { current: Math.floor(Math.random() * 100), peak: 0, avg: 0 },
+              memory: { used: Math.floor(Math.random() * 8192), total: 8192, percent: 0 },
+              network: { in: Math.floor(Math.random() * 1000), out: Math.floor(Math.random() * 500), latency: Math.floor(Math.random() * 100) },
+              disk: { read: Math.floor(Math.random() * 500), write: Math.floor(Math.random() * 300), iops: Math.floor(Math.random() * 1000) }
+            },
+            history: history
+          };
+        },
         dashStart() {
           this.dashStop();
           const cards = [];
           for (let i = 0; i < this.dashCardCount; i++) {
-            cards.push({
-              id: i,
-              value: Math.floor(Math.random() * 1000),
-              label: 'Metric-' + i,
-              progress: Math.floor(Math.random() * 100),
-              color: colors[i % colors.length]
-            });
+            cards.push(this.dashCreateCard(i));
           }
           this.dashCards = cards;
           this.dashRunning = true;
           this.dashMetrics = { avgUpdate: '-', totalUpdates: 0, droppedFrames: 0, fps: '-' };
           this.dashUpdateTimes = [];
-          this.dashFrameCount = 0;
           let lastFrameTime = performance.now();
+          let fpsFrames = 0;
+          let fpsLastTime = performance.now();
 
-          this.dashTimerId = setInterval(() => {
+          const vm = this;
+          function tick() {
             const start = performance.now();
-            // Update ~30% of cards each tick
-            const updateCount = Math.floor(this.dashCards.length * 0.3);
+            // Update 80% of cards — stress Vue 2's $set + deep reactivity
+            const updateCount = Math.floor(vm.dashCards.length * 0.8);
             for (let j = 0; j < updateCount; j++) {
-              const idx = Math.floor(Math.random() * this.dashCards.length);
-              // Vue 2 reactivity limitation: need $set for nested changes
-              this.$set(this.dashCards, idx, {
-                ...this.dashCards[idx],
-                value: Math.floor(Math.random() * 1000),
-                progress: Math.floor(Math.random() * 100)
+              const idx = Math.floor(Math.random() * vm.dashCards.length);
+              const card = vm.dashCards[idx];
+              // Vue 2: must use $set to replace the entire card object
+              // because nested property changes via Object.defineProperty
+              // require either $set or full object replacement for reactivity
+              const newCpu = Math.floor(Math.random() * 100);
+              const newMemUsed = Math.floor(Math.random() * 8192);
+              const newMemPct = Math.round(newMemUsed / 8192 * 100);
+              const newLatency = Math.floor(Math.random() * 120);
+              const newIops = Math.floor(Math.random() * 1000);
+              // Shift history array and add new point
+              const newHistory = card.history.slice(1);
+              newHistory.push(newCpu);
+              // Determine status
+              const status = newCpu > 90 || newMemPct > 90 ? 'critical' : (newCpu > 70 || newMemPct > 75 ? 'warning' : 'normal');
+              // Vue 2: replace entire card object to ensure all nested changes are reactive
+              vm.$set(vm.dashCards, idx, {
+                id: card.id,
+                label: card.label,
+                color: card.color,
+                status: status,
+                stats: {
+                  cpu: { current: newCpu, peak: Math.max(card.stats.cpu.peak, newCpu), avg: Math.round((card.stats.cpu.avg * 0.9) + (newCpu * 0.1)) },
+                  memory: { used: newMemUsed, total: 8192, percent: newMemPct },
+                  network: { in: Math.floor(Math.random() * 1000), out: Math.floor(Math.random() * 500), latency: newLatency },
+                  disk: { read: Math.floor(Math.random() * 500), write: Math.floor(Math.random() * 300), iops: newIops }
+                },
+                history: newHistory
               });
             }
-            this.$nextTick(() => {
+            vm.$nextTick(function() {
               const elapsed = performance.now() - start;
-              this.dashUpdateTimes.push(elapsed);
-              if (this.dashUpdateTimes.length > 100) this.dashUpdateTimes.shift();
-              this.dashMetrics.totalUpdates++;
-              this.dashMetrics.avgUpdate = Math.round(
-                this.dashUpdateTimes.reduce((a, b) => a + b, 0) / this.dashUpdateTimes.length
+              vm.dashUpdateTimes.push(elapsed);
+              if (vm.dashUpdateTimes.length > 60) vm.dashUpdateTimes.shift();
+              vm.dashMetrics.totalUpdates++;
+              vm.dashMetrics.avgUpdate = Math.round(
+                vm.dashUpdateTimes.reduce(function(a, b) { return a + b; }, 0) / vm.dashUpdateTimes.length
               );
-              // Detect frame drops (> 32ms = missed 60fps target)
+              // Frame drop detection
               const now = performance.now();
               if (now - lastFrameTime > 32) {
-                this.dashMetrics.droppedFrames++;
+                vm.dashMetrics.droppedFrames++;
               }
               lastFrameTime = now;
+              // FPS calculation
+              fpsFrames++;
+              if (now - fpsLastTime >= 1000) {
+                vm.dashMetrics.fps = fpsFrames;
+                fpsFrames = 0;
+                fpsLastTime = now;
+              }
             });
-          }, this.dashInterval);
-
-          // FPS counter
-          this.dashFpsTimer = setInterval(() => {
-            this.dashMetrics.fps = this.dashMetrics.totalUpdates > 0
-              ? Math.min(60, Math.round(1000 / (this.dashMetrics.avgUpdate || 16)))
-              : '-';
-          }, 500);
-
-          this.addLog(`Dashboard started: ${this.dashCardCount} cards, ${this.dashInterval}ms interval`);
+            if (vm.dashRunning) {
+              vm.dashRafId = requestAnimationFrame(tick);
+            }
+          }
+          this.dashRafId = requestAnimationFrame(tick);
+          this.addLog(`Dashboard started: ${this.dashCardCount} cards, rAF loop, 80% update, nested objects`);
         },
         dashStop() {
-          if (this.dashTimerId) { clearInterval(this.dashTimerId); this.dashTimerId = null; }
+          if (this.dashRafId) { cancelAnimationFrame(this.dashRafId); this.dashRafId = null; }
           if (this.dashFpsTimer) { clearInterval(this.dashFpsTimer); this.dashFpsTimer = null; }
           this.dashRunning = false;
           if (this.dashMetrics.totalUpdates > 0) {
-            this.addLog(`Dashboard stopped. Avg: ${this.dashMetrics.avgUpdate}ms, Dropped: ${this.dashMetrics.droppedFrames}`);
+            this.addLog(`Dashboard stopped. Avg: ${this.dashMetrics.avgUpdate}ms, Dropped: ${this.dashMetrics.droppedFrames}, FPS: ${this.dashMetrics.fps}`);
           }
         },
 
