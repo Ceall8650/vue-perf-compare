@@ -73,6 +73,13 @@
     .bundle-item { background: #0f3460; padding: 12px 20px; border-radius: 8px; }
     .bundle-item .size { font-size: 18px; font-weight: 600; color: #e94560; }
     .bundle-item .name { font-size: 11px; color: #888; margin-top: 4px; }
+    .explain-box { background: #0a0a1a; border: 1px solid #222; border-radius: 8px; padding: 14px 16px; margin-top: 14px; font-size: 12px; line-height: 1.7; }
+    .explain-box summary { cursor: pointer; color: #e94560; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+    .explain-box .code-tag { display: inline-block; background: #1a1a2e; color: #e94560; padding: 1px 6px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 11px; }
+    .explain-box ul { padding-left: 18px; color: #aaa; }
+    .explain-box li { margin-bottom: 3px; }
+    .explain-box .label-good { color: #4fc08d; }
+    .explain-box .label-bad { color: #e94560; }
     .highlight { color: #4fc08d; }
     .warning { color: #e94560; }
   </style>
@@ -136,6 +143,16 @@
           </tbody>
         </table>
       </div>
+      <details class="explain-box">
+        <summary>Vue 2 List Update Approach</summary>
+        <ul>
+          <li><span class="code-tag">Object.defineProperty</span> — init time recursively walks all properties on every item</li>
+          <li>Update: <span class="code-tag">$set(array, idx, newObj)</span> — must replace entire item object to ensure reactivity</li>
+          <li>Swap: <span class="code-tag">[...this.items]</span> — spread creates new array, triggers full v-for diff</li>
+          <li>Virtual DOM diffs <span class="label-bad">every VNode</span> including static text/attrs on each render</li>
+          <li class="label-bad">No patch flags — cannot distinguish static vs dynamic content</li>
+        </ul>
+      </details>
     </div>
 
     <!-- Test 2: Dashboard -->
@@ -200,6 +217,16 @@
           </div>
         </div>
       </div>
+      <details class="explain-box">
+        <summary>Vue 2 Dashboard Update Approach</summary>
+        <ul>
+          <li>Update: <span class="code-tag">$set(dashCards, idx, {...newCard})</span> — must create a full new object for each changed card</li>
+          <li>Deep nesting (stats.cpu.current): Object.defineProperty <span class="label-bad">cannot reliably detect deep mutations</span>, requires full card replacement</li>
+          <li>History array: <span class="code-tag">card.history.slice(1).push(val)</span> — creates new array each tick</li>
+          <li>Each <span class="code-tag">$set</span> call triggers watcher scheduling independently</li>
+          <li class="label-bad">80% cards replaced per frame = massive GC pressure from object churn</li>
+        </ul>
+      </details>
     </div>
 
     <!-- Test 3: Deep Nesting -->
@@ -230,6 +257,16 @@
       <div style="max-height: 350px; overflow-y: auto; border: 1px solid #333; border-radius: 6px; padding: 8px;">
         <tree-node v-for="node in treeData" :key="node.id" :node="node"></tree-node>
       </div>
+      <details class="explain-box">
+        <summary>Vue 2 Deep Nesting Approach</summary>
+        <ul>
+          <li>Generate: <span class="code-tag">Object.defineProperty</span> recursively walks <span class="label-bad">every property of every node</span> at creation time</li>
+          <li>Update: Mutate <span class="code-tag">node.count</span> then <span class="code-tag">this.treeData = [...this.treeData]</span> to force reactivity</li>
+          <li>Array replace triggers <span class="label-bad">full v-for diff at root level</span>, even if only 10% changed</li>
+          <li>Virtual DOM diffs every node in tree — static spans (icon, badge, meta) are <span class="label-bad">compared every time</span></li>
+          <li class="label-bad">No Block Tree optimization — diff complexity is O(total nodes), not O(changed nodes)</li>
+        </ul>
+      </details>
     </div>
 
     <!-- Test 4: Heavy Init -->
@@ -265,33 +302,50 @@
           <input v-model.number="field.value" type="number" @input="heavyOnInput(field)">
         </div>
       </div>
+      <details class="explain-box">
+        <summary>Vue 2 Heavy Init Approach</summary>
+        <ul>
+          <li>Init: <span class="code-tag">this.heavyFields = fields</span> — Vue 2 recursively walks <span class="label-bad">all properties of all 1000 objects</span> with Object.defineProperty</li>
+          <li>Each field creates a Dep instance + closure for getter/setter = <span class="label-bad">high memory overhead</span></li>
+          <li>Update: <span class="code-tag">this.heavyFields = [...this.heavyFields]</span> — array replacement triggers full v-for re-diff</li>
+          <li>v-model on each input creates a watcher per field — <span class="label-bad">1000 watchers for 1000 fields</span></li>
+          <li class="label-bad">Init cost is proportional to total properties, not usage</li>
+        </ul>
+      </details>
     </div>
 
     <!-- Test 5: Bundle Size -->
     <div class="panel" v-if="currentTab === 'bundle'">
-      <h3 style="margin-bottom: 12px;">Bundle Size Comparison (Tree-shaking)</h3>
+      <h3 style="margin-bottom: 12px;">Bundle Size (Actual CDN Measurement)</h3>
       <div class="bundle-demo">
-        <p style="color: #888; margin-bottom: 20px;">Vue 2 does not support tree-shaking — the entire runtime is included</p>
-        <div class="bundle-size">~33 KB</div>
-        <p style="color: #888; margin-top: 8px;">min + gzip (full runtime)</p>
-        <div class="bundle-breakdown">
-          <div class="bundle-item">
-            <div class="size">22.8 KB</div>
-            <div class="name">Runtime</div>
+        <p style="color: #888; margin-bottom: 12px;">Vue 2 does not support tree-shaking — the entire runtime is always included</p>
+
+        <div class="metrics" style="justify-content: center;">
+          <div class="metric">
+            <div class="metric-label">Transfer (gzip)</div>
+            <div class="metric-value">{{ bundleTransfer }}<span class="metric-unit">KB</span></div>
           </div>
-          <div class="bundle-item">
-            <div class="size">10.2 KB</div>
-            <div class="name">Compiler</div>
+          <div class="metric">
+            <div class="metric-label">Decoded (raw)</div>
+            <div class="metric-value">{{ bundleDecoded }}<span class="metric-unit">KB</span></div>
           </div>
-          <div class="bundle-item">
-            <div class="size warning">0 KB saved</div>
-            <div class="name">Tree-shaking</div>
+          <div class="metric">
+            <div class="metric-label">Load Time</div>
+            <div class="metric-value">{{ bundleLoadTime }}<span class="metric-unit">ms</span></div>
           </div>
         </div>
-        <div style="margin-top: 30px; text-align: left; background: #0a0a1a; padding: 16px; border-radius: 8px; font-size: 13px;">
+
+        <div style="margin-top: 16px; background: #0a0a1a; padding: 12px 16px; border-radius: 8px; font-size: 12px; color: #666; text-align: left;">
+          <p style="margin-bottom: 4px;"><strong style="color: #888;">Measurement:</strong> <span style="color:#aaa;">Resource Timing API — actual transfer size from CDN (jsdelivr)</span></p>
+          <p style="margin-bottom: 4px;"><strong style="color: #888;">Source:</strong> <span style="color:#aaa;">vue@2.7.16/dist/vue.js (development build for this demo)</span></p>
+          <p><strong style="color: #888;">Note:</strong> <span style="color:#aaa;">Production build (vue.min.js) is ~33 KB gzip. Vue 2 cannot tree-shake — all APIs are bundled regardless of usage.</span></p>
+          <p style="margin-top: 4px;"><strong style="color: #888;">Reference:</strong> <span style="color:#aaa;"><a href="https://v2.vuejs.org/v2/guide/comparison.html" target="_blank" style="color:#e94560;">Vue 2 Official Docs — Comparison with Other Frameworks</a></span></p>
+        </div>
+
+        <div style="margin-top: 20px; text-align: left; background: #0a0a1a; padding: 16px; border-radius: 8px; font-size: 13px;">
           <p style="color: #e94560; font-weight: 600; margin-bottom: 8px;">Vue 2 Limitations:</p>
           <ul style="color: #aaa; padding-left: 20px; line-height: 1.8;">
-            <li>Object.defineProperty - must walk all properties at init</li>
+            <li>Object.defineProperty — must walk all properties at init</li>
             <li>Cannot detect property additions/deletions (need Vue.set)</li>
             <li>Cannot detect array index changes directly</li>
             <li>All global APIs bundled regardless of usage</li>
@@ -359,6 +413,10 @@
           dashRafId: null,
           dashUpdateTimes: [],
           dashFpsTimer: null,
+          // Test 5: Bundle
+          bundleTransfer: '-',
+          bundleDecoded: '-',
+          bundleLoadTime: '-',
           // Test 3: Tree
           treeData: [],
           treeMetrics: { generate: '-', update: '-' },
@@ -708,6 +766,14 @@
         this.dashStop();
       },
       mounted() {
+        // Measure actual Vue bundle size from CDN
+        const entries = performance.getEntriesByType('resource');
+        const vueEntry = entries.find(e => e.name.includes('vue'));
+        if (vueEntry) {
+          this.bundleTransfer = vueEntry.transferSize ? (vueEntry.transferSize / 1024).toFixed(1) : 'N/A';
+          this.bundleDecoded = vueEntry.decodedBodySize ? (vueEntry.decodedBodySize / 1024).toFixed(1) : 'N/A';
+          this.bundleLoadTime = Math.round(vueEntry.responseEnd - vueEntry.startTime);
+        }
         const vm = this;
         window.addEventListener('message', function(e) {
           if (!e.data || e.data.type !== 'sync-action') return;

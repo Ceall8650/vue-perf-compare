@@ -73,6 +73,13 @@
     .bundle-item { background: #0f3460; padding: 12px 20px; border-radius: 8px; }
     .bundle-item .size { font-size: 18px; font-weight: 600; color: #42b883; }
     .bundle-item .name { font-size: 11px; color: #888; margin-top: 4px; }
+    .explain-box { background: #0a0a1a; border: 1px solid #222; border-radius: 8px; padding: 14px 16px; margin-top: 14px; font-size: 12px; line-height: 1.7; }
+    .explain-box summary { cursor: pointer; color: #42b883; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+    .explain-box .code-tag { display: inline-block; background: #1a1a2e; color: #42b883; padding: 1px 6px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 11px; }
+    .explain-box ul { padding-left: 18px; color: #aaa; }
+    .explain-box li { margin-bottom: 3px; }
+    .explain-box .label-good { color: #4fc08d; }
+    .explain-box .label-bad { color: #e94560; }
     .highlight { color: #42b883; }
     .warning { color: #e94560; }
     .good { color: #42b883; }
@@ -423,6 +430,21 @@
           });
         }
 
+        // === Test 5: Bundle Size (measured) ===
+        const bundleTransfer = ref('-');
+        const bundleDecoded = ref('-');
+        const bundleLoadTime = ref('-');
+        // Measure on next tick (after mount)
+        nextTick(() => {
+          const entries = performance.getEntriesByType('resource');
+          const vueEntry = entries.find(e => e.name.includes('vue'));
+          if (vueEntry) {
+            bundleTransfer.value = vueEntry.transferSize ? (vueEntry.transferSize / 1024).toFixed(1) : 'N/A';
+            bundleDecoded.value = vueEntry.decodedBodySize ? (vueEntry.decodedBodySize / 1024).toFixed(1) : 'N/A';
+            bundleLoadTime.value = Math.round(vueEntry.responseEnd - vueEntry.startTime);
+          }
+        });
+
         // === Test 4: Heavy Init ===
         const heavyFields = shallowRef([]);
         const heavyMetrics = reactive({ init: '-', update: '-' });
@@ -508,7 +530,8 @@
           listItems, listMetrics, listCreate, listUpdateEvery10th, listSwapRows, listAppend1000, listClear,
           dashCards, dashRunning, dashCardCount, dashMetrics, dashStart, dashStop,
           treeData, treeMetrics, treeNodeCount, treeGenerate, treeUpdateAll, treeUpdateDeep, treeUpdate10Pct,
-          heavyFields, heavyMetrics, heavySum, heavyInit, heavyOnInput, heavyUpdateAll
+          heavyFields, heavyMetrics, heavySum, heavyInit, heavyOnInput, heavyUpdateAll,
+          bundleTransfer, bundleDecoded, bundleLoadTime
         };
       },
       template: `
@@ -570,6 +593,16 @@
                 </tbody>
               </table>
             </div>
+            <details class="explain-box">
+              <summary>Vue 3 List Update Approach</summary>
+              <ul>
+                <li><span class="code-tag">Proxy</span> — lazy tracking, only wraps objects when accessed (no init cost)</li>
+                <li>Update: <span class="code-tag">items[i].score = newVal</span> — <span class="label-good">direct mutation</span>, Proxy setter triggers targeted update</li>
+                <li>Swap: <span class="code-tag">shallowRef</span> + <span class="code-tag">triggerRef</span> — skip deep reactivity for large flat arrays</li>
+                <li>Compiler generates <span class="label-good">patch flags</span> — only diffs dynamic bindings (score, style), skips static text</li>
+                <li class="label-good">Static hoisting — VNodes for th/td labels created once, reused across renders</li>
+              </ul>
+            </details>
           </div>
 
           <!-- Test 2: Dashboard -->
@@ -634,6 +667,16 @@
                 </div>
               </div>
             </div>
+            <details class="explain-box">
+              <summary>Vue 3 Dashboard Update Approach</summary>
+              <ul>
+                <li>Update: <span class="code-tag">card.stats.cpu.current = newVal</span> — <span class="label-good">direct property mutation</span>, no object replacement needed</li>
+                <li><span class="code-tag">ref([])</span> with deep Proxy — tracks each <span class="code-tag">card.stats.cpu.current</span> access individually</li>
+                <li>Only template bindings that read the changed property re-render — <span class="label-good">fine-grained updates</span></li>
+                <li>History array: <span class="code-tag">card.history.shift(); card.history.push(val)</span> — in-place mutation, no new arrays</li>
+                <li class="label-good">Zero object churn — no $set, no spread, no GC pressure from replaced objects</li>
+              </ul>
+            </details>
           </div>
 
           <!-- Test 3: Deep Nesting -->
@@ -664,6 +707,16 @@
             <div style="max-height: 350px; overflow-y: auto; border: 1px solid #333; border-radius: 6px; padding: 8px;">
               <TreeNode v-for="node in treeData" :key="node.id" :node="node" />
             </div>
+            <details class="explain-box">
+              <summary>Vue 3 Deep Nesting Approach</summary>
+              <ul>
+                <li>Generate: <span class="code-tag">ref([])</span> — Proxy wraps lazily, <span class="label-good">no upfront property walking</span></li>
+                <li>Update: <span class="code-tag">node.count = newVal</span> — direct mutation, <span class="label-good">no array replacement needed</span></li>
+                <li>10% update: Only 10% of TreeNode components re-render — <span class="label-good">Proxy tracks which components read which properties</span></li>
+                <li>Compiler generates <span class="label-good">patch flags</span> — skips static spans (icon, badge, meta) during diff</li>
+                <li class="label-good">Block Tree — flat tracking of dynamic nodes, diff complexity is O(dynamic) not O(total)</li>
+              </ul>
+            </details>
           </div>
 
           <!-- Test 4: Heavy Init -->
@@ -699,30 +752,47 @@
                 <input :value="field.value" type="number" @input="e => { field.value = +e.target.value; heavyOnInput(field); }">
               </div>
             </div>
+            <details class="explain-box">
+              <summary>Vue 3 Heavy Init Approach</summary>
+              <ul>
+                <li>Init: <span class="code-tag">shallowRef(fields)</span> — <span class="label-good">no deep reactive wrapping</span>, Proxy only on the array reference</li>
+                <li>Per-field reactivity is opt-in via <span class="code-tag">triggerRef</span> — avoids 1000x Proxy overhead</li>
+                <li>Update: <span class="code-tag">field.value = x; triggerRef(ref)</span> — batch all mutations, single render pass</li>
+                <li>Compiler <span class="label-good">static hoisting</span> — label elements created once, reused for all 1000 fields</li>
+                <li class="label-good">Init cost is near-zero for shallowRef — properties tracked lazily only when accessed in template</li>
+              </ul>
+            </details>
           </div>
 
           <!-- Test 5: Bundle Size -->
           <div class="panel" v-if="currentTab === 'bundle'">
-            <h3 style="margin-bottom: 12px;">Bundle Size Comparison (Tree-shaking)</h3>
+            <h3 style="margin-bottom: 12px;">Bundle Size (Actual CDN Measurement)</h3>
             <div class="bundle-demo">
-              <p style="color: #888; margin-bottom: 20px;">Vue 3 supports tree-shaking — only import what you use</p>
-              <div class="bundle-size">~16 KB</div>
-              <p style="color: #888; margin-top: 8px;">min + gzip (tree-shaken runtime)</p>
-              <div class="bundle-breakdown">
-                <div class="bundle-item">
-                  <div class="size">10.0 KB</div>
-                  <div class="name">Core Runtime</div>
+              <p style="color: #888; margin-bottom: 12px;">Vue 3 supports tree-shaking — only import what you use (ESM bundler required)</p>
+
+              <div class="metrics" style="justify-content: center;">
+                <div class="metric">
+                  <div class="metric-label">Transfer (gzip)</div>
+                  <div class="metric-value">{{ bundleTransfer }}<span class="metric-unit">KB</span></div>
                 </div>
-                <div class="bundle-item">
-                  <div class="size">6.0 KB</div>
-                  <div class="name">Compiler</div>
+                <div class="metric">
+                  <div class="metric-label">Decoded (raw)</div>
+                  <div class="metric-value">{{ bundleDecoded }}<span class="metric-unit">KB</span></div>
                 </div>
-                <div class="bundle-item">
-                  <div class="size good">~17 KB saved</div>
-                  <div class="name">Tree-shaking</div>
+                <div class="metric">
+                  <div class="metric-label">Load Time</div>
+                  <div class="metric-value">{{ bundleLoadTime }}<span class="metric-unit">ms</span></div>
                 </div>
               </div>
-              <div style="margin-top: 30px; text-align: left; background: #0a0a1a; padding: 16px; border-radius: 8px; font-size: 13px;">
+
+              <div style="margin-top: 16px; background: #0a0a1a; padding: 12px 16px; border-radius: 8px; font-size: 12px; color: #666; text-align: left;">
+                <p style="margin-bottom: 4px;"><strong style="color: #888;">Measurement:</strong> <span style="color:#aaa;">Resource Timing API — actual transfer size from CDN (jsdelivr)</span></p>
+                <p style="margin-bottom: 4px;"><strong style="color: #888;">Source:</strong> <span style="color:#aaa;">vue@3.4.38/dist/vue.global.prod.js (production build)</span></p>
+                <p><strong style="color: #888;">Note:</strong> <span style="color:#aaa;">This is the full global build (no tree-shaking). With ESM + bundler (Vite/Webpack), unused APIs like Transition, KeepAlive, v-model are eliminated, reducing to ~16 KB gzip.</span></p>
+                <p style="margin-top: 4px;"><strong style="color: #888;">Reference:</strong> <span style="color:#aaa;"><a href="https://vuejs.org/guide/best-practices/performance.html#bundle-size" target="_blank" style="color:#42b883;">Vue 3 Official Docs — Performance: Bundle Size</a></span></p>
+              </div>
+
+              <div style="margin-top: 20px; text-align: left; background: #0a0a1a; padding: 16px; border-radius: 8px; font-size: 13px;">
                 <p style="color: #42b883; font-weight: 600; margin-bottom: 8px;">Vue 3 Improvements:</p>
                 <ul style="color: #aaa; padding-left: 20px; line-height: 1.8;">
                   <li><span class="good">Proxy-based</span> reactivity — lazy, no init walk, detects add/delete</li>
